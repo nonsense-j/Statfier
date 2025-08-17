@@ -100,6 +100,7 @@ public class Utility {
     public final static boolean CHECKSTYLE_MUTATION = Boolean.parseBoolean(getProperty("CHECKSTYLE_MUTATION"));
     public final static boolean SONARQUBE_MUTATION = Boolean.parseBoolean(getProperty("SONARQUBE_MUTATION"));
     public final static boolean FINDSECBUGS_MUTATION = Boolean.parseBoolean(getProperty("FINDSECBUGS_MUTATION"));
+    public final static boolean CODENAVI_MUTATION = Boolean.parseBoolean(getProperty("CODENAVI_MUTATION"));
     public final static boolean COMPILE = (SPOTBUGS_MUTATION || INFER_MUTATION || FINDSECBUGS_MUTATION) ? true : false;
 
     public final static String SONARQUBE_PROJECT_NAME = getProperty("SONARQUBE_PROJECT_NAME");
@@ -130,6 +131,7 @@ public class Utility {
     public final static String CHECKSTYLE_SEED_PATH = getProperty("CHECKSTYLE_SEED_PATH");
     public final static String SONARQUBE_SEED_PATH = getProperty("SONARQUBE_SEED_PATH");
     public final static String FINDSECBUGS_SEED_PATH = getProperty("FINDSECBUGS_SEED_PATH");
+    public final static String CODENAVI_SEED_PATH = getProperty("CODENAVI_SEED_PATH");
     public static String SEED_PATH = null;
 
     // mutants and results
@@ -147,6 +149,8 @@ public class Utility {
     public final static String INFER_PATH = getProperty("INFER_PATH");
     public final static String SONARSCANNER_PATH = getProperty("SONARSCANNER_PATH");
     public final static String FINDSECBUGS_PATH = getProperty("FINDSECBUGS_PATH");
+    public final static String CODENAVI_PATH = getProperty("CODENAVI_PATH");
+    public final static String CODENAVI_CHECKER_DIR = getProperty("CODENAVI_CHECKER_DIR");
     public static List<String> spotBugsJarList = getFilenamesFromFolder(toolPath + sep + "SpotBugs_Dependency", true);
     public static List<String> inferJarList = getFilenamesFromFolder(toolPath + sep + "Infer_Dependency", true);
     public static List<String> findSecBugsJarList = getFilenamesFromFolder(toolPath + sep + "FindSecBugs_Dependency", true);
@@ -232,6 +236,9 @@ public class Utility {
         if (FINDSECBUGS_MUTATION) {
             SEED_PATH = FINDSECBUGS_SEED_PATH;
         }
+        if (CODENAVI_MUTATION) {
+            SEED_PATH = CODENAVI_SEED_PATH;
+        }
         if (SEED_PATH == null) {
             System.err.println("SEED_PATH is not initialized correctly!");
             System.exit(-1);
@@ -248,15 +255,32 @@ public class Utility {
             }
         }
         try {
-            File file = new File(CHECKSTYLE_PATH);
-            if (!file.exists()) {
-                System.err.println("CheckStyle is not existed!");
-                System.exit(-1);
+            if (CHECKSTYLE_MUTATION) {
+                File file = new File(CHECKSTYLE_CONFIG_PATH);
+                if (!file.exists()) {
+                    System.err.println("CheckStyle Configs is not existed!");
+                    System.exit(-1);
+                }
             }
-            file = new File(SPOTBUGS_PATH);
-            if (!file.exists()) {
-                System.err.println("SpotBugs is not existed");
-                System.exit(-1);
+            if (SPOTBUGS_MUTATION) {
+                File file = new File(SPOTBUGS_PATH);
+                if (!file.exists()) {
+                    System.err.println("SpotBugs is not existed");
+                    System.exit(-1);
+                }
+            }
+            if (CODENAVI_MUTATION) {
+                File file = new File(CODENAVI_PATH);
+                if (!file.exists()) {
+                    System.err.println("CodeNavi jar file is not existed: " + CODENAVI_PATH);
+                    System.exit(-1);
+                }
+                // check CODENAVI_CHECKER_DIR folder exists
+                File checkerDir = new File(CODENAVI_CHECKER_DIR);
+                if (!checkerDir.exists()) {
+                    System.err.println("CodeNavi checker directory is not existed: " + CODENAVI_CHECKER_DIR);
+                    System.exit(-1);
+                }
             }
             File ud = new File(EVALUATION_PATH);
             if (ud.exists()) {

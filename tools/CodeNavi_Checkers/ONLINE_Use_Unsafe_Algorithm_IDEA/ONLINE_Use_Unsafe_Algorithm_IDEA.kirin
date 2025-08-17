@@ -1,0 +1,10 @@
+functionCall fc where
+    and(
+        fc.name == "getInstance",
+        fc.base.type.name == "javax.crypto.Cipher",
+        fc.arguments[0] va where
+            and(
+                va.isConstant == true,
+                va.constantValue match "IDEA.*"
+            )
+    );

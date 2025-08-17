@@ -65,10 +65,12 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import edu.polyu.analysis.TypeWrapper;
 import edu.polyu.report.CheckStyleReport;
+import edu.polyu.report.CodeNaviReport;
 import edu.polyu.report.InferReport;
 import edu.polyu.report.PMDReport;
 import edu.polyu.report.SonarQubeReport;
 import edu.polyu.report.SpotBugsReport;
+import edu.polyu.thread.CodeNaviInvokeThread;
 import edu.polyu.transform.Transform;
 import net.sourceforge.pmd.PMD;
 import net.sourceforge.pmd.PMDConfiguration;
@@ -412,6 +414,102 @@ public class Schedule {
                 }
             }
             wrappers.addAll(validWrappers);
+        }
+    }
+
+    public void executeCodeNaviTransform(String initSeedFolderPath) {
+        // Initial seed processing from CODENAVI_SEED_PATH (Requirement 4.1)
+        List<String> seedFilePaths = getFilenamesFromFolder(initSeedFolderPath, true);
+        System.out.println("All Initial Seed Count: " + seedFilePaths.size());
+        
+        int initValidSeedWrapperSize = 0;
+        // Create TypeWrapper instances for each valid seed (Requirement 4.2)
+        for (int index = 0; index < seedFilePaths.size(); index++) {
+            String seedFilePath = seedFilePaths.get(index);
+            String[] tokens = seedFilePath.split(reg_sep);
+            String seedFolderName = tokens[tokens.length - 2];
+            
+            // Run initial CodeNavi analysis to determine if seed has bugs
+            String reportOutputDir = REPORT_FOLDER.getAbsolutePath() + sep + "initial_" + seedFolderName;
+            File reportDir = new File(reportOutputDir);
+            if (!reportDir.exists()) {
+                reportDir.mkdirs();
+            }
+            
+            // Invoke CodeNavi on initial seed
+            CodeNaviInvokeThread codeNaviThread = new CodeNaviInvokeThread(
+                new File(seedFilePath).getParent(), 
+                new File(seedFilePath).getName(), 
+                reportOutputDir
+            );
+            codeNaviThread.run();
+            
+            // Parse the initial report
+            String reportPath = reportOutputDir + sep + "error_report_1.xml";
+            CodeNaviReport.readSingleCodeNaviResultFile(new File(seedFilePath), reportPath);
+            
+            if (!file2row.containsKey(seedFilePath)) {
+                continue;
+            }
+            
+            initValidSeedWrapperSize++;
+            TypeWrapper seedWrapper = new TypeWrapper(seedFilePath, seedFolderName);
+            if (!bug2wrappers.containsKey(seedWrapper.getFolderName())) {
+                bug2wrappers.put(seedWrapper.getFolderName(), new ArrayList<>());
+            }
+            bug2wrappers.get(seedWrapper.getFolderName()).add(seedWrapper);
+        }
+        System.out.println("Initial Valid Wrappers Size: " + initValidSeedWrapperSize);
+        
+        // Iterative transformation loop from 1 to SEARCH_DEPTH (Requirement 4.3)
+        for (int depth = 1; depth <= SEARCH_DEPTH; depth++) {
+            for (Map.Entry<String, List<TypeWrapper>> entry : bug2wrappers.entrySet()) {
+                List<TypeWrapper> seedWrappers = new ArrayList<>();
+                seedWrappers.addAll(entry.getValue());
+                entry.getValue().clear();
+                
+                // Apply program transformations (Requirement 4.4)
+                List<TypeWrapper> mutantWrappers = Transform.singleLevelExplorer(seedWrappers);
+                
+                // Analyze each mutant with CodeNavi (Requirement 4.4)
+                for (int wrapperIndex = 0; wrapperIndex < mutantWrappers.size(); wrapperIndex++) {
+                    TypeWrapper mutantWrapper = mutantWrappers.get(wrapperIndex);
+                    String[] tokens = mutantWrapper.getFilePath().split(reg_sep);
+                    String seedFileNameWithSuffix = tokens[tokens.length - 1];
+                    String subSeedFolderName = tokens[tokens.length - 2];
+                    String seedFileName = seedFileNameWithSuffix.substring(0, seedFileNameWithSuffix.length() - 5);
+                    
+                    // Create report output directory for this mutant
+                    String reportOutputDir = REPORT_FOLDER.getAbsolutePath() + sep + subSeedFolderName + sep + seedFileName;
+                    File reportDir = new File(reportOutputDir);
+                    if (!reportDir.exists()) {
+                        reportDir.mkdirs();
+                    }
+                    
+                    // Invoke CodeNavi analysis on mutant (Requirement 4.4)
+                    CodeNaviInvokeThread codeNaviThread = new CodeNaviInvokeThread(
+                        mutantWrapper.getFolderPath(), 
+                        seedFileNameWithSuffix, 
+                        reportOutputDir
+                    );
+                    codeNaviThread.run();
+                    
+                    // Parse XML report and integrate results (Requirement 4.5)
+                    String reportPath = reportOutputDir + sep + "error_report_1.xml";
+                    File reportFile = new File(reportPath);
+                    if (reportFile.exists() && reportFile.length() > 0) {
+                        CodeNaviReport.readSingleCodeNaviResultFile(new File(mutantWrapper.getFilePath()), reportPath);
+                        
+                        // Collect non-buggy mutants for next iteration (Requirement 4.6)
+                        if (!mutantWrapper.isBuggy()) {
+                            entry.getValue().add(mutantWrapper);
+                        }
+                    } else {
+                        // If report generation failed, log it
+                        failedToolExecution.add("CodeNavi analysis failed for: " + mutantWrapper.getFilePath());
+                    }
+                }
+            }
         }
     }
 
